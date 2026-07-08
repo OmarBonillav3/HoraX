@@ -1,0 +1,1250 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HoraX — Calculadora de Horas Extra</title>
+<style>
+  :root {
+    --bg: #0A0F12;
+    --surface: #121A1D;
+    --surface-2: #182226;
+    --border: rgba(255,255,255,0.08);
+    --text: #EDF3F3;
+    --text-muted: #8CA0A3;
+    --teal: #2DD4BF;
+    --teal-dim: rgba(45,212,191,0.16);
+    --violet: #9B8CFF;
+    --violet-dim: rgba(155,140,255,0.18);
+    --neutral-band: #232F33;
+    --amber: #F5A623;
+    --danger: #FF6B6B;
+    --radius: 14px;
+    --radius-sm: 9px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background:
+      radial-gradient(circle at 15% -10%, rgba(45,212,191,0.10), transparent 45%),
+      radial-gradient(circle at 90% 0%, rgba(155,140,255,0.10), transparent 40%),
+      var(--bg);
+    background-attachment: fixed;
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+
+  .mono { font-family: "SF Mono", "Cascadia Code", "Roboto Mono", Consolas, monospace; }
+
+  button { font-family: inherit; }
+  button:focus-visible, input:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 2px;
+  }
+
+  /* ---------- loading ---------- */
+  .loading-screen {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+  .loading-pulse {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    border: 3px solid var(--surface-2);
+    border-top-color: var(--teal);
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .wrap {
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 28px 18px 48px;
+  }
+
+  /* ---------- header ---------- */
+  .head { margin-bottom: 22px; }
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-size: 11px;
+    color: var(--teal);
+    margin: 0 0 10px;
+    font-weight: 700;
+  }
+  .title-row { display: flex; align-items: center; gap: 8px; }
+  .bolt-icon { color: var(--teal); flex-shrink: 0; }
+  .title {
+    font-size: 36px;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: -0.02em;
+  }
+  .title .accent { color: var(--teal); }
+  .subtitle {
+    color: var(--text-muted);
+    margin: 8px 0 0;
+    font-size: 14.5px;
+    line-height: 1.5;
+    max-width: 40ch;
+  }
+
+  /* ---------- band strip (signature element) ---------- */
+  .strip-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 16px 15px;
+    margin-bottom: 16px;
+  }
+  .strip-track {
+    position: relative;
+    height: 36px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--surface-2);
+  }
+  .strip-segment {
+    position: absolute;
+    top: 0; bottom: 0;
+  }
+  .strip-segment.neutral { background: var(--neutral-band); }
+  .strip-segment.band-50 { background: var(--teal); box-shadow: inset 0 0 16px rgba(0,0,0,0.15); }
+  .strip-segment.band-100 { background: var(--violet); box-shadow: inset 0 0 16px rgba(0,0,0,0.15); }
+  .strip-preview {
+    position: absolute;
+    top: -3px; bottom: -3px;
+    border: 2px solid #fff;
+    border-radius: 999px;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .strip-preview.visible { opacity: 0.9; }
+  .strip-ticks {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10.5px;
+    color: var(--text-muted);
+    margin-top: 9px;
+  }
+  .strip-legend {
+    display: flex;
+    gap: 14px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+  }
+  .legend-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ---------- cards ---------- */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 16px;
+    margin-bottom: 14px;
+  }
+  .card-title {
+    font-size: 15px;
+    margin: 0 0 14px;
+    font-weight: 600;
+  }
+  .card-toggle {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: none;
+    border: none;
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 600;
+    padding: 0;
+    cursor: pointer;
+  }
+  .card-toggle svg { transition: transform 0.2s ease; color: var(--text-muted); }
+  .card-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+  .card-body { margin-top: 16px; }
+
+  .field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 12.5px;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+  .field-full { margin-bottom: 10px; display: flex; flex-direction: column; gap: 6px; }
+  input[type="text"], input[type="number"], input[type="date"], input[type="time"], input[type="email"], input[type="password"] {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 11px;
+    color: var(--text);
+    font-size: 14.5px;
+    font-family: inherit;
+    width: 100%;
+    color-scheme: dark;
+  }
+
+  .rate-readout {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    background: var(--surface-2);
+    border-radius: var(--radius-sm);
+    padding: 11px 12px;
+    margin: 2px 0 16px;
+    font-size: 12.5px;
+    color: var(--text-muted);
+  }
+  .rate-readout b { color: var(--text); font-family: "SF Mono", "Roboto Mono", monospace; font-weight: 600; }
+
+  .mini-label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    margin: 0 0 10px;
+  }
+
+  .bands-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+  .band-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 68px 30px;
+    gap: 6px;
+    align-items: center;
+  }
+  .band-remove {
+    background: none; border: none; color: var(--text-muted); cursor: pointer;
+    width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+    font-size: 13px;
+  }
+  .band-remove:hover { color: var(--danger); background: rgba(255,107,107,0.1); }
+
+  .btn-ghost {
+    background: none;
+    border: 1px dashed var(--border);
+    color: var(--text-muted);
+    border-radius: var(--radius-sm);
+    padding: 10px;
+    font-size: 13px;
+    cursor: pointer;
+    width: 100%;
+  }
+  .btn-ghost:hover { border-color: var(--teal); color: var(--teal); }
+
+  .btn-primary {
+    background: var(--teal);
+    color: #06201C;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 13px;
+    font-size: 14.5px;
+    font-weight: 700;
+    cursor: pointer;
+    width: 100%;
+    margin-top: 6px;
+  }
+  .btn-primary:hover { filter: brightness(1.08); }
+  .btn-primary:active { transform: translateY(1px); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .btn-secondary {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+    width: 100%;
+    margin-top: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .btn-secondary:hover:not(:disabled) { border-color: var(--violet); color: var(--violet); }
+  .btn-secondary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .auth-error {
+    background: rgba(255,107,107,0.12);
+    color: var(--danger);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    font-size: 12.5px;
+    margin: 4px 0 12px;
+    line-height: 1.5;
+  }
+  .auth-error.success {
+    background: rgba(45,212,191,0.12);
+    color: var(--teal);
+  }
+  .auth-switch {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 12.5px;
+    margin-top: 14px;
+  }
+
+  .list-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .count-pill {
+    background: var(--surface-2);
+    color: var(--text-muted);
+    font-size: 12px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-family: "SF Mono", "Roboto Mono", monospace;
+  }
+
+  .entries-list { display: flex; flex-direction: column; gap: 10px; }
+  .entry-card {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 13px 40px 13px 14px;
+    position: relative;
+  }
+  .entry-loc { font-weight: 600; font-size: 14px; }
+  .entry-date { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+  .entry-work { color: var(--text-muted); font-size: 12.5px; margin: 7px 0 0; }
+  .entry-time {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    margin: 6px 0 10px;
+  }
+  .entry-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .badge {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-family: "SF Mono", "Roboto Mono", monospace;
+    font-weight: 600;
+  }
+  .badge.b50 { background: var(--teal-dim); color: var(--teal); }
+  .badge.b100 { background: var(--violet-dim); color: var(--violet); }
+  .badge.warn { background: rgba(245,166,35,0.15); color: var(--amber); }
+  .entry-bottom { display: flex; justify-content: space-between; align-items: baseline; }
+  .entry-pay { font-weight: 700; font-family: "SF Mono", "Roboto Mono", monospace; font-size: 15.5px; }
+  .entry-delete {
+    position: absolute; top: 12px; right: 10px;
+    background: none; border: none; color: var(--text-muted);
+    cursor: pointer; padding: 5px; font-size: 13px; border-radius: 6px;
+  }
+  .entry-delete:hover { color: var(--danger); background: rgba(255,107,107,0.1); }
+
+  .empty-state {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13.5px;
+    padding: 22px 10px;
+    line-height: 1.6;
+  }
+
+  .summary-bar {
+    background: linear-gradient(135deg, rgba(45,212,191,0.14), rgba(155,140,255,0.10));
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 17px 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 18px;
+  }
+  .summary-label { font-size: 12px; color: var(--text-muted); margin: 0 0 4px; }
+  .summary-value { font-size: 25px; font-weight: 700; margin: 0; font-family: "SF Mono", "Roboto Mono", monospace; }
+  .summary-hours { font-family: "SF Mono", "Roboto Mono", monospace; color: var(--text-muted); font-size: 14px; }
+
+  .footer-links { display: flex; justify-content: center; gap: 18px; flex-wrap: wrap; }
+  .reset-link {
+    display: block;
+    margin: 0 auto;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 12.5px;
+    text-decoration: underline;
+    cursor: pointer;
+    padding: 8px;
+  }
+  .reset-link:hover { color: var(--danger); }
+  .reset-link.logout:hover { color: var(--teal); }
+  .storage-note {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 11.5px;
+    opacity: 0.7;
+    margin: 2px 0 0;
+  }
+  .account-note {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 12px;
+    margin: 0 0 16px;
+  }
+  .account-note b { color: var(--text); }
+
+  @media (max-width: 420px) {
+    .field-row { grid-template-columns: 1fr; }
+    .band-row { grid-template-columns: 1fr 1fr; row-gap: 6px; }
+    .band-row .band-remove { grid-column: span 2; justify-self: end; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="loading-screen" id="loadingScreen">
+  <div class="loading-pulse"></div>
+  <p>Cargando…</p>
+</div>
+
+<div class="wrap" id="authScreen" style="display:none">
+  <header class="head">
+    <p class="eyebrow">Registro de horas extra</p>
+    <div class="title-row">
+      <svg class="bolt-icon" width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M13 2L4 14H11L10 22L20 9H13L13 2Z" fill="currentColor"/></svg>
+      <h1 class="title">Hora<span class="accent">X</span></h1>
+    </div>
+    <p class="subtitle">Inicia sesión para ver tus turnos desde cualquier dispositivo.</p>
+  </header>
+  <section class="card">
+    <label class="field-full">Correo
+      <input type="email" id="authEmail" autocomplete="username" required>
+    </label>
+    <label class="field-full">Contraseña
+      <input type="password" id="authPassword" autocomplete="current-password" minlength="6" required>
+    </label>
+    <div class="auth-error" id="authError" hidden></div>
+    <button class="btn-primary" id="loginBtn" type="button">Iniciar sesión</button>
+    <button class="btn-secondary" id="signupBtn" type="button">Crear cuenta</button>
+    <p class="auth-switch">Solo necesitas crear la cuenta una vez. Después usa el mismo correo y contraseña en cualquier dispositivo.</p>
+  </section>
+</div>
+
+<div class="wrap" id="mainWrap" style="display:none">
+  <header class="head">
+    <p class="eyebrow">Registro de horas extra</p>
+    <div class="title-row">
+      <svg class="bolt-icon" width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M13 2L4 14H11L10 22L20 9H13L13 2Z" fill="currentColor"/></svg>
+      <h1 class="title">Hora<span class="accent">X</span></h1>
+    </div>
+    <p class="subtitle">Pon tu entrada y salida. HoraX calcula solo cuántas horas caen en cada franja y cuánto te deben.</p>
+  </header>
+
+  <p class="account-note">Sesión iniciada como <b id="accountEmail"></b></p>
+
+  <section class="strip-card" aria-label="Tu jornada de 24 horas">
+    <div class="strip-track" id="stripTrack">
+      <div class="strip-segment neutral" id="segNormal"></div>
+      <div class="strip-preview" id="segPreview"></div>
+      <div class="strip-preview" id="segPreview2"></div>
+    </div>
+    <div class="strip-ticks">
+      <span>12 AM</span><span>6 AM</span><span>12 PM</span><span>6 PM</span><span>12 AM</span>
+    </div>
+    <div class="strip-legend" id="stripLegend"></div>
+  </section>
+
+  <section class="card" id="configCard">
+    <button class="card-toggle" id="configToggle" type="button" aria-expanded="false">
+      <span>Tu tarifa</span>
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6L8 10L12 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <div class="card-body" id="configBody" hidden>
+      <div class="field-row">
+        <label>Salario mensual (RD$)
+          <input type="number" id="inSalary" min="0" step="0.01">
+        </label>
+        <label>Divisor
+          <input type="number" id="inDivisor" min="1" step="0.01">
+        </label>
+      </div>
+      <div class="field-row">
+        <label>Jornada normal — entrada
+          <input type="time" id="inNormalStart">
+        </label>
+        <label>Jornada normal — salida
+          <input type="time" id="inNormalEnd">
+        </label>
+      </div>
+      <div class="rate-readout" id="rateReadout"></div>
+
+      <p class="mini-label">Franjas de recargo</p>
+      <div id="bandsList" class="bands-list"></div>
+      <button class="btn-ghost" id="addBandBtn" type="button">+ Agregar franja</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2 class="card-title">Nuevo turno</h2>
+    <form id="entryForm">
+      <div class="field-row">
+        <label>Fecha
+          <input type="date" id="inDate" required>
+        </label>
+        <label>Localidad
+          <input type="text" id="inLocation" placeholder="Ej. Cotuí" required>
+        </label>
+      </div>
+      <label class="field-full">Trabajo
+        <input type="text" id="inWork" placeholder="Ej. Comisionamiento Huawei">
+      </label>
+      <div class="field-row">
+        <label>Entrada
+          <input type="time" id="inStart" required>
+        </label>
+        <label>Salida
+          <input type="time" id="inEnd" required>
+        </label>
+      </div>
+      <button class="btn-primary" id="submitEntryBtn" type="submit">Agregar turno</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <div class="list-head">
+      <h2 class="card-title" style="margin:0">Tus turnos</h2>
+      <span class="count-pill" id="countPill">0</span>
+    </div>
+    <div id="entriesList" class="entries-list"></div>
+    <div class="empty-state" id="emptyState" hidden>Aún no tienes turnos registrados.<br>Agrega el primero arriba ↑</div>
+    <button class="btn-secondary" id="exportPdfBtn" type="button" disabled>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M14 2v6h6" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      <span id="exportPdfLabel">Exportar PDF</span>
+    </button>
+  </section>
+
+  <footer class="summary-bar">
+    <div>
+      <p class="summary-label">Total acumulado</p>
+      <p class="summary-value" id="totalPay">RD$0.00</p>
+    </div>
+    <div class="summary-hours" id="totalHours">0h</div>
+  </footer>
+
+  <div class="footer-links">
+    <button class="reset-link" id="resetBtn" type="button">Borrar todos mis datos</button>
+    <button class="reset-link logout" id="logoutBtn" type="button">Cerrar sesión</button>
+  </div>
+  <p class="storage-note">Tus turnos se guardan en la nube (Supabase) — se ven igual desde cualquier dispositivo donde inicies sesión.</p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function(){
+  // ======= PEGA AQUI TUS CREDENCIALES DE SUPABASE =======
+  const SUPABASE_ANON_KEY = 'sb_publishable_62xe5M70vXfafCnWynY_RA_tCdwtr9a';
+  const SUPABASE_URL = 'https://dmhqkfgvvusngdihlgsp.supabase.co/rest/v1/';
+  // const SUPABASE_URL = 'PEGA_TU_PROJECT_URL_AQUI';
+  // const SUPABASE_ANON_KEY = 'PEGA_TU_ANON_KEY_AQUI';
+  // =======================================================
+
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const DEFAULT_CONFIG = {
+    salary: 30000,
+    divisor: 23.83,
+    normalStart: '08:00',
+    normalEnd: '18:00',
+    bands: [
+      { id: 'b1', start: '18:00', end: '21:00', pct: 50 },
+      { id: 'b2', start: '21:00', end: '00:00', pct: 50 },
+      { id: 'b3', start: '00:00', end: '08:00', pct: 100 }
+    ]
+  };
+
+  const SEED_ENTRIES_RAW = [
+    { date: '2025-06-02', location: 'Cotuí', work: 'Comisionamiento Huawei', start: '08:00', end: '20:00' },
+    { date: '2025-06-03', location: 'Bonao IV', work: 'Comisionamiento Huawei', start: '07:00', end: '20:00' },
+    { date: '2025-06-06', location: 'Cotuí', work: 'Comisionamiento Huawei', start: '07:00', end: '20:00' }
+  ];
+
+  let config = null;
+  let entries = null;
+
+  function clone(obj){ return JSON.parse(JSON.stringify(obj)); }
+
+  function toMinutes(hhmm) {
+    const parts = hhmm.split(':');
+    return Number(parts[0])*60 + Number(parts[1]);
+  }
+  function fmt12(hhmm) {
+    const parts = hhmm.split(':');
+    const h = Number(parts[0]), m = Number(parts[1]);
+    const period = h >= 12 ? 'PM' : 'AM';
+    let h12 = h % 12; if (h12 === 0) h12 = 12;
+    return h12 + ':' + String(m).padStart(2,'0') + ' ' + period;
+  }
+  function fmtDate(iso) {
+    const d = new Date(iso + 'T12:00:00');
+    const s = d.toLocaleDateString('es-DO', { weekday:'short', day:'numeric', month:'short', year:'numeric' });
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+  function fmtDateShort(iso) {
+    const parts = iso.split('-');
+    return parts[2] + '/' + parts[1] + '/' + parts[0];
+  }
+  function fmtMoney(n) {
+    return 'RD$' + n.toLocaleString('es-DO', { minimumFractionDigits:2, maximumFractionDigits:2 });
+  }
+  function fmtHours(mins) {
+    const h = mins/60;
+    return (Number.isInteger(h) ? String(h) : h.toFixed(1)) + 'h';
+  }
+  function uid() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+  }
+  function escapeHtml(s) {
+    const div = document.createElement('div');
+    div.textContent = s == null ? '' : s;
+    return div.innerHTML;
+  }
+
+  function bandOverlapMinutes(segStart, segEnd, band) {
+    let bs0 = toMinutes(band.start);
+    let be0 = toMinutes(band.end);
+    if (be0 <= bs0) be0 += 1440;
+    let total = 0;
+    const lo = Math.floor(segStart/1440) - 1;
+    const hi = Math.ceil(segEnd/1440) + 1;
+    for (let d = lo; d <= hi; d++) {
+      const bs = bs0 + d*1440;
+      const be = be0 + d*1440;
+      const os = Math.max(segStart, bs);
+      const oe = Math.min(segEnd, be);
+      if (oe > os) total += (oe - os);
+    }
+    return total;
+  }
+
+  function computeEntry(raw, cfg) {
+    const normalStart = toMinutes(cfg.normalStart);
+    const normalEnd = toMinutes(cfg.normalEnd);
+    let start = toMinutes(raw.start);
+    let end = toMinutes(raw.end);
+    if (end <= start) end += 1440;
+
+    const segments = [];
+    if (start < normalStart) segments.push([start, Math.min(end, normalStart)]);
+    if (end > normalEnd) segments.push([Math.max(start, normalEnd), end]);
+
+    const dailyRate = cfg.salary / cfg.divisor;
+    const hourlyRate = dailyRate / 8;
+
+    const bandResults = cfg.bands.map(function(b){ return { id:b.id, start:b.start, end:b.end, pct:b.pct, minutes:0 }; });
+    let totalOvertimeMinutes = 0;
+    segments.forEach(function(seg){
+      const s = seg[0], e = seg[1];
+      totalOvertimeMinutes += (e - s);
+      cfg.bands.forEach(function(band, i){
+        bandResults[i].minutes += bandOverlapMinutes(s, e, band);
+      });
+    });
+
+    const totalBandMinutes = bandResults.reduce(function(sum,b){ return sum+b.minutes; }, 0);
+    const uncoveredMinutes = Math.max(0, totalOvertimeMinutes - totalBandMinutes);
+    const pay = bandResults.reduce(function(sum,b){ return sum + (b.minutes/60) * hourlyRate * (1 + b.pct/100); }, 0);
+
+    return { totalOvertimeMinutes: totalOvertimeMinutes, bandResults: bandResults, uncoveredMinutes: uncoveredMinutes, pay: pay, hourlyRate: hourlyRate };
+  }
+
+  // ---------- supabase data layer ----------
+  async function getUserId() {
+    const { data } = await supabase.auth.getUser();
+    return data && data.user ? data.user.id : null;
+  }
+
+  async function loadData() {
+    const uid_ = await getUserId();
+    if (!uid_) { config = clone(DEFAULT_CONFIG); entries = []; return; }
+
+    const { data: cfgRows } = await supabase.from('overtime_config').select('*').eq('user_id', uid_).limit(1);
+    if (cfgRows && cfgRows.length) {
+      const r = cfgRows[0];
+      config = { salary: Number(r.salary), divisor: Number(r.divisor), normalStart: r.normal_start, normalEnd: r.normal_end, bands: r.bands };
+    } else {
+      config = clone(DEFAULT_CONFIG);
+      await saveConfig();
+    }
+
+    const { data: entryRows } = await supabase.from('overtime_entries').select('*').eq('user_id', uid_).order('date', { ascending: true });
+
+    if (entryRows && entryRows.length) {
+      entries = entryRows.map(function(r){
+        const raw = { date: r.date, location: r.location, work: r.work, start: r.start_time, end: r.end_time };
+        return Object.assign({ id: r.id, createdAt: new Date(r.created_at).getTime(), calc: computeEntry(raw, config) }, raw);
+      });
+    } else {
+      entries = [];
+      for (const raw of SEED_ENTRIES_RAW) {
+        const dbRow = await insertEntry(raw);
+        if (dbRow) {
+          entries.push(Object.assign({ id: dbRow.id, createdAt: new Date(dbRow.created_at).getTime(), calc: computeEntry(raw, config) }, raw));
+        }
+      }
+    }
+  }
+
+  async function saveConfig() {
+    const uid_ = await getUserId();
+    if (!uid_) return;
+    const row = {
+      user_id: uid_,
+      salary: config.salary,
+      divisor: config.divisor,
+      normal_start: config.normalStart,
+      normal_end: config.normalEnd,
+      bands: config.bands
+    };
+    const { error } = await supabase.from('overtime_config').upsert(row, { onConflict: 'user_id' });
+    if (error) console.error('No se pudo guardar la configuracion', error);
+  }
+
+  async function insertEntry(raw) {
+    const uid_ = await getUserId();
+    if (!uid_) return null;
+    const row = {
+      user_id: uid_,
+      date: raw.date,
+      location: raw.location,
+      work: raw.work,
+      start_time: raw.start,
+      end_time: raw.end
+    };
+    const { data, error } = await supabase.from('overtime_entries').insert(row).select().single();
+    if (error) { console.error(error); return null; }
+    return data;
+  }
+
+  async function deleteEntryFromDb(id) {
+    const { error } = await supabase.from('overtime_entries').delete().eq('id', id);
+    if (error) console.error(error);
+  }
+
+  async function deleteAllEntriesFromDb() {
+    const uid_ = await getUserId();
+    if (!uid_) return;
+    const { error } = await supabase.from('overtime_entries').delete().eq('user_id', uid_);
+    if (error) console.error(error);
+  }
+
+  function bandClass(pct) {
+    return pct >= 75 ? 'band-100' : 'band-50';
+  }
+
+  function positionPreview(range) {
+    const p1 = document.getElementById('segPreview');
+    const p2 = document.getElementById('segPreview2');
+    if (!range) {
+      p1.classList.remove('visible');
+      p2.classList.remove('visible');
+      return;
+    }
+    const dur = range[1]-range[0];
+    const s = range[0] % 1440;
+    const e2 = s + dur;
+    if (e2 <= 1440) {
+      p1.style.left = (s/1440*100)+'%';
+      p1.style.width = ((e2-s)/1440*100)+'%';
+      p1.classList.add('visible');
+      p2.classList.remove('visible');
+    } else {
+      p1.style.left = (s/1440*100)+'%';
+      p1.style.width = ((1440-s)/1440*100)+'%';
+      p1.classList.add('visible');
+      p2.style.left = '0%';
+      p2.style.width = ((e2-1440)/1440*100)+'%';
+      p2.classList.add('visible');
+    }
+  }
+
+  function renderStrip(previewRange) {
+    const track = document.getElementById('stripTrack');
+    const olds = track.querySelectorAll('.strip-segment:not(.neutral)');
+    olds.forEach(function(el){ el.remove(); });
+
+    const neutral = document.getElementById('segNormal');
+    const ns = toMinutes(config.normalStart), ne = toMinutes(config.normalEnd);
+    neutral.style.left = (ns/1440*100) + '%';
+    neutral.style.width = (Math.max(0,ne-ns)/1440*100) + '%';
+
+    config.bands.forEach(function(b){
+      let bs = toMinutes(b.start), be = toMinutes(b.end);
+      if (be <= bs) be += 1440;
+      const pieces = [];
+      if (be <= 1440) pieces.push([bs,be]);
+      else { pieces.push([bs,1440]); pieces.push([0, be-1440]); }
+      pieces.forEach(function(p){
+        const s = p[0], e = p[1];
+        const seg = document.createElement('div');
+        seg.className = 'strip-segment ' + bandClass(b.pct);
+        seg.style.left = (s/1440*100)+'%';
+        seg.style.width = ((e-s)/1440*100)+'%';
+        track.appendChild(seg);
+      });
+    });
+
+    positionPreview(previewRange);
+
+    const legend = document.getElementById('stripLegend');
+    const uniquePct = Array.from(new Set(config.bands.map(function(b){return b.pct;}))).sort(function(a,b){return a-b;});
+    let legendHtml = '<span class="legend-chip"><span class="legend-dot" style="background:var(--neutral-band)"></span>Jornada normal</span>';
+    uniquePct.forEach(function(p){
+      const color = p>=75 ? 'var(--violet)' : 'var(--teal)';
+      legendHtml += '<span class="legend-chip"><span class="legend-dot" style="background:'+color+'"></span>Extra '+p+'%</span>';
+    });
+    legend.innerHTML = legendHtml;
+  }
+
+  function renderRateReadout() {
+    const daily = config.salary/config.divisor;
+    const hourly = daily/8;
+    const el = document.getElementById('rateReadout');
+    let html = '<span>Hora regular: <b>'+fmtMoney(hourly)+'</b></span>';
+    config.bands.forEach(function(b){
+      const rate = hourly*(1+b.pct/100);
+      html += '<span>'+b.pct+'%: <b>'+fmtMoney(rate)+'</b>/h</span>';
+    });
+    el.innerHTML = html;
+  }
+
+  function renderBandsList() {
+    const list = document.getElementById('bandsList');
+    let html = '';
+    config.bands.forEach(function(band){
+      html += '<div class="band-row">' +
+        '<input type="time" value="'+band.start+'" data-field="start" data-id="'+band.id+'">' +
+        '<input type="time" value="'+band.end+'" data-field="end" data-id="'+band.id+'">' +
+        '<input type="number" value="'+band.pct+'" min="0" max="300" step="1" data-field="pct" data-id="'+band.id+'">' +
+        '<button class="band-remove" type="button" data-remove="'+band.id+'" aria-label="Eliminar franja">✕</button>' +
+        '</div>';
+    });
+    list.innerHTML = html;
+  }
+
+  function renderEntries() {
+    const list = document.getElementById('entriesList');
+    const empty = document.getElementById('emptyState');
+    const countPill = document.getElementById('countPill');
+    countPill.textContent = entries.length;
+    document.getElementById('exportPdfBtn').disabled = entries.length === 0;
+
+    if (entries.length === 0) {
+      list.innerHTML = '';
+      empty.hidden = false;
+      renderSummary();
+      return;
+    }
+    empty.hidden = true;
+
+    const sorted = entries.slice().sort(function(a,b){
+      if (a.date !== b.date) return b.date.localeCompare(a.date);
+      return b.createdAt - a.createdAt;
+    });
+
+    let html = '';
+    sorted.forEach(function(en){
+      let badges = '';
+      en.calc.bandResults.filter(function(b){return b.minutes>0;}).forEach(function(b){
+        const cls = bandClass(b.pct) === 'band-100' ? 'b100' : 'b50';
+        badges += '<span class="badge '+cls+'">'+fmtHours(b.minutes)+' · '+b.pct+'%</span>';
+      });
+      if (en.calc.uncoveredMinutes > 0) {
+        badges += '<span class="badge warn">'+fmtHours(en.calc.uncoveredMinutes)+' sin franja</span>';
+      }
+      html += '<div class="entry-card" data-id="'+en.id+'">' +
+        '<button class="entry-delete" data-delete="'+en.id+'" aria-label="Eliminar turno">✕</button>' +
+        '<div class="entry-loc">📍 '+escapeHtml(en.location || 'Sin localidad')+'</div>' +
+        '<div class="entry-date">'+fmtDate(en.date)+'</div>' +
+        (en.work ? '<div class="entry-work">'+escapeHtml(en.work)+'</div>' : '') +
+        '<div class="entry-time mono">'+fmt12(en.start)+' – '+fmt12(en.end)+'</div>' +
+        '<div class="entry-badges">'+badges+'</div>' +
+        '<div class="entry-bottom">' +
+        '<span class="mono" style="color:var(--text-muted);font-size:12.5px">'+fmtHours(en.calc.totalOvertimeMinutes)+' extra</span>' +
+        '<span class="entry-pay">'+fmtMoney(en.calc.pay)+'</span>' +
+        '</div></div>';
+    });
+    list.innerHTML = html;
+    renderSummary();
+  }
+
+  function renderSummary() {
+    const totalPay = entries.reduce(function(s,e){return s+e.calc.pay;}, 0);
+    const totalMin = entries.reduce(function(s,e){return s+e.calc.totalOvertimeMinutes;}, 0);
+    document.getElementById('totalPay').textContent = fmtMoney(totalPay);
+    document.getElementById('totalHours').textContent = fmtHours(totalMin);
+  }
+
+  function currentPreviewRange() {
+    const s = document.getElementById('inStart').value;
+    const e = document.getElementById('inEnd').value;
+    if (!s || !e) return null;
+    let start = toMinutes(s), end = toMinutes(e);
+    if (end <= start) end += 1440;
+    return [start, end];
+  }
+
+  function renderAll() {
+    document.getElementById('inSalary').value = config.salary;
+    document.getElementById('inDivisor').value = config.divisor;
+    document.getElementById('inNormalStart').value = config.normalStart;
+    document.getElementById('inNormalEnd').value = config.normalEnd;
+    renderBandsList();
+    renderRateReadout();
+    renderStrip(currentPreviewRange());
+    renderEntries();
+  }
+
+  function recalcAllEntries() {
+    entries = entries.map(function(en){
+      return Object.assign({}, en, { calc: computeEntry(en, config) });
+    });
+  }
+
+  function exportPDF() {
+    if (!entries.length) return;
+    if (!window.jspdf) {
+      alert('No se pudo cargar el generador de PDF (necesitas conexión a internet la primera vez). Intenta de nuevo en un momento.');
+      return;
+    }
+    const btn = document.getElementById('exportPdfBtn');
+    const label = document.getElementById('exportPdfLabel');
+    btn.disabled = true;
+    label.textContent = 'Generando…';
+
+    try {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
+      const marginX = 40;
+      const pageHeight = doc.internal.pageSize.getHeight();
+      let y = 50;
+
+      const cols = [
+        { key: 'date', label: 'Fecha', w: 65 },
+        { key: 'location', label: 'Localidad', w: 90 },
+        { key: 'work', label: 'Trabajo', w: 170 },
+        { key: 'start', label: 'Entrada', w: 55 },
+        { key: 'end', label: 'Salida', w: 55 },
+        { key: 'h50', label: 'Horas 50%', w: 65 },
+        { key: 'h100', label: 'Horas 100%', w: 70 },
+        { key: 'total', label: 'Total h', w: 55 },
+        { key: 'pay', label: 'Pago', w: 87 }
+      ];
+      const tableWidth = cols.reduce(function(s,c){ return s+c.w; }, 0);
+
+      function drawTitle() {
+        doc.setFont('helvetica','bold');
+        doc.setFontSize(16);
+        doc.setTextColor(20,30,32);
+        doc.text('HoraX \u2014 Reporte de Horas Extra', marginX, y);
+        y += 18;
+        doc.setFont('helvetica','normal');
+        doc.setFontSize(9);
+        doc.setTextColor(110,120,122);
+        const genDate = new Date().toLocaleDateString('es-DO', { day:'numeric', month:'long', year:'numeric' });
+        doc.text('Generado el ' + genDate + '   \u00b7   Salario mensual: ' + fmtMoney(config.salary) + '   \u00b7   Divisor: ' + config.divisor + '   \u00b7   Jornada normal: ' + fmt12(config.normalStart) + ' - ' + fmt12(config.normalEnd), marginX, y);
+        y += 24;
+      }
+
+      function drawTableHeader() {
+        doc.setFillColor(24,34,38);
+        doc.rect(marginX, y, tableWidth, 22, 'F');
+        doc.setFont('helvetica','bold');
+        doc.setFontSize(9);
+        doc.setTextColor(255,255,255);
+        let x = marginX;
+        cols.forEach(function(c){
+          doc.text(c.label, x + 6, y + 15);
+          x += c.w;
+        });
+        y += 22;
+      }
+
+      function checkPageBreak() {
+        if (y > pageHeight - 90) {
+          doc.addPage();
+          y = 50;
+          drawTableHeader();
+        }
+      }
+
+      drawTitle();
+      drawTableHeader();
+
+      const sorted = entries.slice().sort(function(a,b){
+        return a.date.localeCompare(b.date) || a.createdAt - b.createdAt;
+      });
+
+      doc.setFont('helvetica','normal');
+      doc.setFontSize(9);
+
+      sorted.forEach(function(en, idx){
+        checkPageBreak();
+        const rowY = y;
+        const rowH = 20;
+        if (idx % 2 === 0) {
+          doc.setFillColor(244,247,247);
+          doc.rect(marginX, rowY, tableWidth, rowH, 'F');
+        }
+        doc.setTextColor(30,40,42);
+
+        const h50 = en.calc.bandResults.filter(function(b){return b.pct<75;}).reduce(function(s,b){return s+b.minutes;},0)/60;
+        const h100 = en.calc.bandResults.filter(function(b){return b.pct>=75;}).reduce(function(s,b){return s+b.minutes;},0)/60;
+        const totalH = en.calc.totalOvertimeMinutes/60;
+
+        const rowVals = {
+          date: fmtDateShort(en.date),
+          location: en.location || '-',
+          work: en.work || '-',
+          start: fmt12(en.start),
+          end: fmt12(en.end),
+          h50: h50 ? h50.toFixed(1)+'h' : '-',
+          h100: h100 ? h100.toFixed(1)+'h' : '-',
+          total: totalH.toFixed(1)+'h',
+          pay: fmtMoney(en.calc.pay)
+        };
+
+        let x = marginX;
+        cols.forEach(function(c){
+          let text = String(rowVals[c.key]);
+          const maxWidth = c.w - 10;
+          const fitLines = doc.splitTextToSize(text, maxWidth);
+          doc.text(fitLines[0] || text, x + 6, rowY + 14);
+          x += c.w;
+        });
+        y += rowH;
+      });
+
+      y += 12;
+      checkPageBreak();
+      doc.setDrawColor(200,200,200);
+      doc.line(marginX, y, marginX + tableWidth, y);
+      y += 22;
+
+      const totalPay = entries.reduce(function(s,e){ return s+e.calc.pay; }, 0);
+      const totalMin = entries.reduce(function(s,e){ return s+e.calc.totalOvertimeMinutes; }, 0);
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(12);
+      doc.setTextColor(20,30,32);
+      doc.text('Total: ' + fmtHours(totalMin) + '   \u00b7   ' + fmtMoney(totalPay), marginX, y);
+
+      doc.save('horax_reporte_horas_extra.pdf');
+    } catch(err) {
+      console.error(err);
+      alert('Hubo un problema generando el PDF. Intenta de nuevo.');
+    } finally {
+      btn.disabled = entries.length === 0;
+      label.textContent = 'Exportar PDF';
+    }
+  }
+
+  function showAuthMessage(msg, isSuccess) {
+    const el = document.getElementById('authError');
+    el.textContent = msg;
+    el.hidden = false;
+    el.classList.toggle('success', !!isSuccess);
+  }
+
+  function wireAuthEvents() {
+    document.getElementById('loginBtn').addEventListener('click', async function(){
+      const email = document.getElementById('authEmail').value.trim();
+      const password = document.getElementById('authPassword').value;
+      if (!email || !password) { showAuthMessage('Pon tu correo y contraseña.'); return; }
+      const { error } = await supabase.auth.signInWithPassword({ email: email, password: password });
+      if (error) showAuthMessage(error.message);
+    });
+    document.getElementById('signupBtn').addEventListener('click', async function(){
+      const email = document.getElementById('authEmail').value.trim();
+      const password = document.getElementById('authPassword').value;
+      if (!email || !password) { showAuthMessage('Pon tu correo y contraseña.'); return; }
+      const { data, error } = await supabase.auth.signUp({ email: email, password: password });
+      if (error) { showAuthMessage(error.message); return; }
+      if (data && data.session) {
+        showAuthMessage('Cuenta creada. Entrando…', true);
+      } else {
+        showAuthMessage('Cuenta creada. Revisa tu correo para confirmar y luego inicia sesión.', true);
+      }
+    });
+  }
+
+  function wireAppEvents() {
+    document.getElementById('configToggle').addEventListener('click', function(){
+      const body = document.getElementById('configBody');
+      const btn = document.getElementById('configToggle');
+      const isHidden = body.hidden;
+      body.hidden = !isHidden;
+      btn.setAttribute('aria-expanded', String(isHidden));
+    });
+
+    document.getElementById('inSalary').addEventListener('change', function(e){
+      config.salary = parseFloat(e.target.value) || 0;
+      recalcAllEntries(); renderRateReadout(); renderEntries(); saveConfig();
+    });
+    document.getElementById('inDivisor').addEventListener('change', function(e){
+      config.divisor = parseFloat(e.target.value) || 23.83;
+      recalcAllEntries(); renderRateReadout(); renderEntries(); saveConfig();
+    });
+    document.getElementById('inNormalStart').addEventListener('change', function(e){
+      config.normalStart = e.target.value;
+      recalcAllEntries(); renderStrip(currentPreviewRange()); renderEntries(); saveConfig();
+    });
+    document.getElementById('inNormalEnd').addEventListener('change', function(e){
+      config.normalEnd = e.target.value;
+      recalcAllEntries(); renderStrip(currentPreviewRange()); renderEntries(); saveConfig();
+    });
+
+    document.getElementById('bandsList').addEventListener('change', function(e){
+      const id = e.target.dataset.id;
+      const field = e.target.dataset.field;
+      if (!id) return;
+      const band = config.bands.find(function(b){return b.id===id;});
+      if (!band) return;
+      if (field === 'pct') band.pct = parseFloat(e.target.value) || 0;
+      else band[field] = e.target.value;
+      recalcAllEntries(); renderRateReadout(); renderStrip(currentPreviewRange()); renderEntries(); saveConfig();
+    });
+    document.getElementById('bandsList').addEventListener('click', function(e){
+      const id = e.target.dataset.remove;
+      if (!id) return;
+      config.bands = config.bands.filter(function(b){return b.id!==id;});
+      renderBandsList(); recalcAllEntries(); renderRateReadout(); renderStrip(currentPreviewRange()); renderEntries(); saveConfig();
+    });
+    document.getElementById('addBandBtn').addEventListener('click', function(){
+      config.bands.push({ id: uid(), start: '18:00', end: '21:00', pct: 50 });
+      renderBandsList(); saveConfig();
+    });
+
+    ['inStart','inEnd'].forEach(function(id){
+      document.getElementById(id).addEventListener('input', function(){ renderStrip(currentPreviewRange()); });
+    });
+
+    document.getElementById('entryForm').addEventListener('submit', async function(e){
+      e.preventDefault();
+      const submitBtn = document.getElementById('submitEntryBtn');
+      const raw = {
+        date: document.getElementById('inDate').value,
+        location: document.getElementById('inLocation').value.trim(),
+        work: document.getElementById('inWork').value.trim(),
+        start: document.getElementById('inStart').value,
+        end: document.getElementById('inEnd').value
+      };
+      if (!raw.date || !raw.start || !raw.end) return;
+      submitBtn.disabled = true;
+      const dbRow = await insertEntry(raw);
+      submitBtn.disabled = false;
+      if (!dbRow) { alert('No se pudo guardar el turno. Revisa tu conexión.'); return; }
+      const calc = computeEntry(raw, config);
+      entries.push(Object.assign({ id: dbRow.id, createdAt: new Date(dbRow.created_at).getTime(), calc: calc }, raw));
+      renderEntries();
+      document.getElementById('inLocation').value = '';
+      document.getElementById('inWork').value = '';
+      document.getElementById('inStart').value = '';
+      document.getElementById('inEnd').value = '';
+      renderStrip(null);
+    });
+
+    document.getElementById('entriesList').addEventListener('click', async function(e){
+      const id = e.target.dataset.delete;
+      if (!id) return;
+      await deleteEntryFromDb(id);
+      entries = entries.filter(function(en){return en.id!==id;});
+      renderEntries();
+    });
+
+    document.getElementById('exportPdfBtn').addEventListener('click', function(){
+      exportPDF();
+    });
+
+    document.getElementById('resetBtn').addEventListener('click', async function(){
+      const ok = confirm('¿Seguro que quieres borrar todos tus turnos y tu configuración? Esto no se puede deshacer.');
+      if (!ok) return;
+      await deleteAllEntriesFromDb();
+      config = clone(DEFAULT_CONFIG);
+      await saveConfig();
+      entries = [];
+      renderAll();
+    });
+
+    document.getElementById('logoutBtn').addEventListener('click', async function(){
+      await supabase.auth.signOut();
+    });
+  }
+
+  async function bootApp() {
+    document.getElementById('authScreen').style.display = 'none';
+    const { data } = await supabase.auth.getUser();
+    document.getElementById('accountEmail').textContent = data && data.user ? data.user.email : '';
+    try {
+      await loadData();
+    } catch (err) {
+      console.error(err);
+      alert('No se pudo conectar con la base de datos. Revisa que copiaste bien la URL y la anon key de Supabase.');
+      return;
+    }
+    renderAll();
+    document.getElementById('mainWrap').style.display = 'block';
+  }
+
+  async function init() {
+    document.getElementById('inDate').value = new Date().toISOString().slice(0,10);
+    wireAuthEvents();
+    wireAppEvents();
+
+    let session = null;
+    try {
+      const res = await supabase.auth.getSession();
+      session = res.data.session;
+    } catch(err) {
+      console.error(err);
+    }
+
+    document.getElementById('loadingScreen').style.display = 'none';
+    if (session) {
+      await bootApp();
+    } else {
+      document.getElementById('authScreen').style.display = 'block';
+    }
+
+    supabase.auth.onAuthStateChange(async function(event, newSession){
+      if (event === 'SIGNED_IN' && newSession) {
+        await bootApp();
+      } else if (event === 'SIGNED_OUT') {
+        document.getElementById('mainWrap').style.display = 'none';
+        document.getElementById('authScreen').style.display = 'block';
+      }
+    });
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
