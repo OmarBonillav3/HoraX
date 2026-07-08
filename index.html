@@ -343,7 +343,7 @@
     background: var(--surface-2);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    padding: 13px 40px 13px 14px;
+    padding: 13px 70px 13px 14px;
     position: relative;
   }
   .entry-loc { font-weight: 600; font-size: 14px; }
@@ -367,12 +367,18 @@
   .badge.warn { background: rgba(245,166,35,0.15); color: var(--amber); }
   .entry-bottom { display: flex; justify-content: space-between; align-items: baseline; }
   .entry-pay { font-weight: 700; font-family: "SF Mono", "Roboto Mono", monospace; font-size: 15.5px; }
-  .entry-delete {
-    position: absolute; top: 12px; right: 10px;
-    background: none; border: none; color: var(--text-muted);
-    cursor: pointer; padding: 5px; font-size: 13px; border-radius: 6px;
+  .entry-actions {
+    position: absolute; top: 8px; right: 6px;
+    display: flex; gap: 2px;
   }
-  .entry-delete:hover { color: var(--danger); background: rgba(255,107,107,0.1); }
+  .entry-icon-btn {
+    background: none; border: none; color: var(--text-muted);
+    cursor: pointer; padding: 6px; font-size: 13px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .entry-icon-btn:hover { color: var(--teal); background: rgba(45,212,191,0.1); }
+  .entry-icon-btn.danger:hover { color: var(--danger); background: rgba(255,107,107,0.1); }
+
 
   .empty-state {
     text-align: center;
@@ -468,7 +474,32 @@
     <div class="auth-error" id="authError" hidden></div>
     <button class="btn-primary" id="loginBtn" type="button">Iniciar sesión</button>
     <button class="btn-secondary" id="signupBtn" type="button">Crear cuenta</button>
+    <button class="btn-ghost" id="forgotBtn" type="button" style="margin-top:10px">¿Olvidaste tu contraseña?</button>
     <p class="auth-switch">Solo necesitas crear la cuenta una vez. Después usa el mismo correo y contraseña en cualquier dispositivo.</p>
+  </section>
+</div>
+
+<div class="wrap" id="resetScreen" style="display:none">
+  <header class="head">
+    <p class="eyebrow">Registro de horas extra</p>
+    <div class="title-row">
+      <svg class="bolt-icon" width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M13 2L4 14H11L10 22L20 9H13L13 2Z" fill="currentColor"/></svg>
+      <h1 class="title">Hora<span class="accent">X</span></h1>
+    </div>
+    <p class="subtitle">Escribe tu nueva contraseña.</p>
+  </header>
+  <section class="card">
+    <label class="field-full">Nueva contraseña
+      <div class="pw-wrap">
+        <input type="password" id="newPassword" minlength="6" required>
+        <button type="button" class="pw-toggle" id="pwToggle2" aria-label="Mostrar contraseña">
+          <svg id="pwIconEye2" width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.6"/></svg>
+          <svg id="pwIconEyeOff2" width="18" height="18" viewBox="0 0 24 24" fill="none" style="display:none"><path d="M3 3l18 18M10.6 10.6a3 3 0 0 0 4.24 4.24M9.9 4.24A11 11 0 0 1 12 4c7 0 11 7 11 7a13.2 13.2 0 0 1-3.15 3.9M6.1 6.1C3.6 7.9 1 12 1 12s4 7 11 7a10.9 10.9 0 0 0 4.24-.86" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </label>
+    <div class="auth-error" id="resetError" hidden></div>
+    <button class="btn-primary" id="saveNewPasswordBtn" type="button">Guardar nueva contraseña</button>
   </section>
 </div>
 
@@ -549,6 +580,7 @@
         </label>
       </div>
       <button class="btn-primary" id="submitEntryBtn" type="submit">Agregar turno</button>
+      <button class="btn-ghost" id="cancelEditBtn" type="button" hidden style="margin-top:8px">Cancelar edición</button>
     </form>
   </section>
 
@@ -613,6 +645,7 @@
 
   let config = null;
   let entries = null;
+  let editingId = null;
 
   function clone(obj){ return JSON.parse(JSON.stringify(obj)); }
 
@@ -773,6 +806,19 @@
     if (error) console.error(error);
   }
 
+  async function updateEntry(id, raw) {
+    const row = {
+      date: raw.date,
+      location: raw.location,
+      work: raw.work,
+      start_time: raw.start,
+      end_time: raw.end
+    };
+    const { error } = await supabase.from('overtime_entries').update(row).eq('id', id);
+    if (error) { console.error(error); return false; }
+    return true;
+  }
+
   async function deleteAllEntriesFromDb() {
     const uid_ = await getUserId();
     if (!uid_) return;
@@ -905,7 +951,10 @@
         badges += '<span class="badge warn">'+fmtHours(en.calc.uncoveredMinutes)+' sin franja</span>';
       }
       html += '<div class="entry-card" data-id="'+en.id+'">' +
-        '<button class="entry-delete" data-delete="'+en.id+'" aria-label="Eliminar turno">✕</button>' +
+        '<div class="entry-actions">' +
+        '<button class="entry-icon-btn" data-edit="'+en.id+'" aria-label="Editar turno"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 20h9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></button>' +
+        '<button class="entry-icon-btn danger" data-delete="'+en.id+'" aria-label="Eliminar turno">✕</button>' +
+        '</div>' +
         '<div class="entry-loc">📍 '+escapeHtml(en.location || 'Sin localidad')+'</div>' +
         '<div class="entry-date">'+fmtDate(en.date)+'</div>' +
         (en.work ? '<div class="entry-work">'+escapeHtml(en.work)+'</div>' : '') +
@@ -934,6 +983,33 @@
     let start = toMinutes(s), end = toMinutes(e);
     if (end <= start) end += 1440;
     return [start, end];
+  }
+
+  function startEdit(id) {
+    const en = entries.find(function(e){ return e.id === id; });
+    if (!en) return;
+    editingId = id;
+    document.getElementById('inDate').value = en.date;
+    document.getElementById('inLocation').value = en.location || '';
+    document.getElementById('inWork').value = en.work || '';
+    document.getElementById('inStart').value = en.start;
+    document.getElementById('inEnd').value = en.end;
+    document.getElementById('submitEntryBtn').textContent = 'Guardar cambios';
+    document.getElementById('cancelEditBtn').hidden = false;
+    renderStrip(currentPreviewRange());
+    document.getElementById('entryForm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  function cancelEdit() {
+    editingId = null;
+    document.getElementById('inLocation').value = '';
+    document.getElementById('inWork').value = '';
+    document.getElementById('inStart').value = '';
+    document.getElementById('inEnd').value = '';
+    document.getElementById('inDate').value = new Date().toISOString().slice(0,10);
+    document.getElementById('submitEntryBtn').textContent = 'Agregar turno';
+    document.getElementById('cancelEditBtn').hidden = true;
+    renderStrip(null);
   }
 
   function renderAll() {
@@ -1096,18 +1172,29 @@
     el.hidden = false;
     el.classList.toggle('success', !!isSuccess);
   }
+  function showResetMessage(msg, isSuccess) {
+    const el = document.getElementById('resetError');
+    el.textContent = msg;
+    el.hidden = false;
+    el.classList.toggle('success', !!isSuccess);
+  }
 
-  function wireAuthEvents() {
-    document.getElementById('pwToggle').addEventListener('click', function(){
-      const input = document.getElementById('authPassword');
-      const eyeOn = document.getElementById('pwIconEye');
-      const eyeOff = document.getElementById('pwIconEyeOff');
+  function wirePasswordToggle(toggleBtnId, inputId, eyeOnId, eyeOffId) {
+    document.getElementById(toggleBtnId).addEventListener('click', function(){
+      const input = document.getElementById(inputId);
+      const eyeOn = document.getElementById(eyeOnId);
+      const eyeOff = document.getElementById(eyeOffId);
       const showing = input.type === 'text';
       input.type = showing ? 'password' : 'text';
       eyeOn.style.display = showing ? '' : 'none';
       eyeOff.style.display = showing ? 'none' : '';
-      document.getElementById('pwToggle').setAttribute('aria-label', showing ? 'Mostrar contraseña' : 'Ocultar contraseña');
+      document.getElementById(toggleBtnId).setAttribute('aria-label', showing ? 'Mostrar contraseña' : 'Ocultar contraseña');
     });
+  }
+
+  function wireAuthEvents() {
+    wirePasswordToggle('pwToggle', 'authPassword', 'pwIconEye', 'pwIconEyeOff');
+    wirePasswordToggle('pwToggle2', 'newPassword', 'pwIconEye2', 'pwIconEyeOff2');
 
     document.getElementById('loginBtn').addEventListener('click', async function(){
       const email = document.getElementById('authEmail').value.trim();
@@ -1115,6 +1202,25 @@
       if (!email || !password) { showAuthMessage('Pon tu correo y contraseña.'); return; }
       const { error } = await supabase.auth.signInWithPassword({ email: email, password: password });
       if (error) showAuthMessage(error.message);
+    });
+    document.getElementById('forgotBtn').addEventListener('click', async function(){
+      const email = document.getElementById('authEmail').value.trim();
+      if (!email) { showAuthMessage('Escribe tu correo arriba y dale click de nuevo aquí.'); return; }
+      const redirectTo = window.location.origin + window.location.pathname;
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: redirectTo });
+      if (error) { showAuthMessage(error.message); return; }
+      showAuthMessage('Te enviamos un correo con un link para poner una contraseña nueva.', true);
+    });
+    document.getElementById('saveNewPasswordBtn').addEventListener('click', async function(){
+      const newPw = document.getElementById('newPassword').value;
+      if (!newPw || newPw.length < 6) { showResetMessage('La contraseña debe tener al menos 6 caracteres.'); return; }
+      const { error } = await supabase.auth.updateUser({ password: newPw });
+      if (error) { showResetMessage(error.message); return; }
+      showResetMessage('Contraseña actualizada. Entrando…', true);
+      setTimeout(async function(){
+        document.getElementById('resetScreen').style.display = 'none';
+        await bootApp();
+      }, 900);
     });
     document.getElementById('signupBtn').addEventListener('click', async function(){
       const email = document.getElementById('authEmail').value.trim();
@@ -1193,6 +1299,21 @@
       };
       if (!raw.date || !raw.start || !raw.end) return;
       submitBtn.disabled = true;
+
+      if (editingId) {
+        const ok = await updateEntry(editingId, raw);
+        submitBtn.disabled = false;
+        if (!ok) { alert('No se pudo guardar el cambio. Revisa tu conexión.'); return; }
+        const calc = computeEntry(raw, config);
+        const idBeingEdited = editingId;
+        entries = entries.map(function(en){
+          return en.id === idBeingEdited ? Object.assign({}, en, raw, { calc: calc }) : en;
+        });
+        cancelEdit();
+        renderEntries();
+        return;
+      }
+
       const dbRow = await insertEntry(raw);
       submitBtn.disabled = false;
       if (!dbRow) { alert('No se pudo guardar el turno. Revisa tu conexión.'); return; }
@@ -1206,9 +1327,17 @@
       renderStrip(null);
     });
 
+    document.getElementById('cancelEditBtn').addEventListener('click', function(){
+      cancelEdit();
+    });
+
     document.getElementById('entriesList').addEventListener('click', async function(e){
-      const id = e.target.dataset.delete;
-      if (!id) return;
+      const editBtn = e.target.closest('[data-edit]');
+      if (editBtn) { startEdit(editBtn.dataset.edit); return; }
+      const delBtn = e.target.closest('[data-delete]');
+      if (!delBtn) return;
+      const id = delBtn.dataset.delete;
+      if (editingId === id) cancelEdit();
       await deleteEntryFromDb(id);
       entries = entries.filter(function(en){return en.id!==id;});
       renderEntries();
@@ -1253,29 +1382,38 @@
     wireAuthEvents();
     wireAppEvents();
 
-    let session = null;
-    try {
-      const res = await supabase.auth.getSession();
-      session = res.data.session;
-    } catch(err) {
-      console.error(err);
-    }
-
-    document.getElementById('loadingScreen').style.display = 'none';
-    if (session) {
-      await bootApp();
-    } else {
-      document.getElementById('authScreen').style.display = 'block';
-    }
+    let firstEventHandled = false;
 
     supabase.auth.onAuthStateChange(async function(event, newSession){
-      if (event === 'SIGNED_IN' && newSession) {
-        await bootApp();
-      } else if (event === 'SIGNED_OUT') {
+      document.getElementById('loadingScreen').style.display = 'none';
+      firstEventHandled = true;
+
+      if (event === 'PASSWORD_RECOVERY') {
+        document.getElementById('authScreen').style.display = 'none';
         document.getElementById('mainWrap').style.display = 'none';
+        document.getElementById('resetScreen').style.display = 'block';
+      } else if (newSession) {
+        document.getElementById('resetScreen').style.display = 'none';
+        await bootApp();
+      } else {
+        document.getElementById('mainWrap').style.display = 'none';
+        document.getElementById('resetScreen').style.display = 'none';
         document.getElementById('authScreen').style.display = 'block';
       }
     });
+
+    // Respaldo por si el evento inicial de Supabase tarda o no llega
+    setTimeout(async function(){
+      if (firstEventHandled) return;
+      let session = null;
+      try {
+        const res = await supabase.auth.getSession();
+        session = res.data.session;
+      } catch(err) { console.error(err); }
+      document.getElementById('loadingScreen').style.display = 'none';
+      if (session) { await bootApp(); }
+      else { document.getElementById('authScreen').style.display = 'block'; }
+    }, 2500);
   }
 
   init();
