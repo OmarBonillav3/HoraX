@@ -1165,13 +1165,6 @@
 
       sorted.forEach(function(en, idx){
         checkPageBreak();
-        const rowY = y;
-        const rowH = 20;
-        if (idx % 2 === 0) {
-          doc.setFillColor(244,247,247);
-          doc.rect(marginX, rowY, tableWidth, rowH, 'F');
-        }
-        doc.setTextColor(30,40,42);
 
         const totalH = en.calc.totalOvertimeMinutes/60;
 
@@ -1192,12 +1185,28 @@
           rowVals[pc.key] = hrs ? hrs.toFixed(1)+'h' : '-';
         });
 
-        let x = marginX;
-        cols.forEach(function(c){
-          let text = String(rowVals[c.key]);
+        const lineH = 11;
+        const cellLines = cols.map(function(c){
+          const text = String(rowVals[c.key]);
           const maxWidth = c.w - 10;
-          const fitLines = doc.splitTextToSize(text, maxWidth);
-          doc.text(fitLines[0] || text, x + 6, rowY + 14);
+          return doc.splitTextToSize(text, maxWidth);
+        });
+        const maxLines = Math.max(1, cellLines.reduce(function(m,l){ return Math.max(m, l.length); }, 1));
+        const rowH = Math.max(20, maxLines*lineH + 8);
+
+        const rowY = y;
+        if (idx % 2 === 0) {
+          doc.setFillColor(244,247,247);
+          doc.rect(marginX, rowY, tableWidth, rowH, 'F');
+        }
+        doc.setTextColor(30,40,42);
+
+        let x = marginX;
+        cols.forEach(function(c, i){
+          const lines = cellLines[i];
+          lines.forEach(function(line, li){
+            doc.text(line, x + 6, rowY + 14 + li*lineH);
+          });
           x += c.w;
         });
         y += rowH;
