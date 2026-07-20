@@ -234,7 +234,7 @@
   .bands-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
   .band-row {
     display: grid;
-    grid-template-columns: 1fr 1fr 68px 30px;
+    grid-template-columns: 1fr 1fr 56px 56px 30px;
     gap: 6px;
     align-items: center;
   }
@@ -244,6 +244,27 @@
     font-size: 13px;
   }
   .band-remove:hover { color: var(--danger); background: rgba(255,107,107,0.1); }
+  .band-weekend {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+  .band-weekend input {
+    width: 15px; height: 15px; accent-color: var(--teal); cursor: pointer; margin: 0;
+  }
+  .bands-hint {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    margin: -2px 0 10px;
+    line-height: 1.5;
+  }
 
   .btn-ghost {
     background: none;
@@ -434,6 +455,7 @@
   @media (max-width: 420px) {
     .field-row { grid-template-columns: 1fr; }
     .band-row { grid-template-columns: 1fr 1fr; row-gap: 6px; }
+    .band-row .band-weekend { flex-direction: row; justify-self: start; }
     .band-row .band-remove { grid-column: span 2; justify-self: end; }
   }
 
@@ -552,6 +574,7 @@
       <div class="rate-readout" id="rateReadout"></div>
 
       <p class="mini-label">Franjas de recargo</p>
+      <p class="bands-hint">Marca "FDS" en una franja para que aplique solo sábados y domingos, con su propio % (puede ser distinto al de un día normal).</p>
       <div id="bandsList" class="bands-list"></div>
       <button class="btn-ghost" id="addBandBtn" type="button">+ Agregar franja</button>
     </div>
@@ -631,9 +654,9 @@
     normalStart: '08:00',
     normalEnd: '18:00',
     bands: [
-      { id: 'b1', start: '18:00', end: '21:00', pct: 50 },
-      { id: 'b2', start: '21:00', end: '00:00', pct: 50 },
-      { id: 'b3', start: '00:00', end: '08:00', pct: 100 }
+      { id: 'b1', start: '18:00', end: '21:00', pct: 35, weekend: false },
+      { id: 'b2', start: '06:00', end: '08:00', pct: 50, weekend: false },
+      { id: 'b3', start: '21:00', end: '23:00', pct: 50, weekend: false }
     ]
   };
 
@@ -659,6 +682,12 @@
     const period = h >= 12 ? 'PM' : 'AM';
     let h12 = h % 12; if (h12 === 0) h12 = 12;
     return h12 + ':' + String(m).padStart(2,'0') + ' ' + period;
+  }
+  function isWeekendDate(dateStr) {
+    if (!dateStr) return false;
+    const d = new Date(dateStr + 'T12:00:00');
+    const day = d.getDay();
+    return day === 0 || day === 6;
   }
   function fmtDate(iso) {
     const d = new Date(iso + 'T12:00:00');
@@ -716,12 +745,15 @@
     const dailyRate = cfg.salary / cfg.divisor;
     const hourlyRate = dailyRate / 8;
 
-    const bandResults = cfg.bands.map(function(b){ return { id:b.id, start:b.start, end:b.end, pct:b.pct, minutes:0 }; });
+    const weekend = isWeekendDate(raw.date);
+    const applicableBands = cfg.bands.filter(function(b){ return !!b.weekend === weekend; });
+
+    const bandResults = applicableBands.map(function(b){ return { id:b.id, start:b.start, end:b.end, pct:b.pct, weekend:!!b.weekend, minutes:0 }; });
     let totalOvertimeMinutes = 0;
     segments.forEach(function(seg){
       const s = seg[0], e = seg[1];
       totalOvertimeMinutes += (e - s);
-      cfg.bands.forEach(function(band, i){
+      applicableBands.forEach(function(band, i){
         bandResults[i].minutes += bandOverlapMinutes(s, e, band);
       });
     });
@@ -730,7 +762,7 @@
     const uncoveredMinutes = Math.max(0, totalOvertimeMinutes - totalBandMinutes);
     const pay = bandResults.reduce(function(sum,b){ return sum + (b.minutes/60) * hourlyRate * (1 + b.pct/100); }, 0);
 
-    return { totalOvertimeMinutes: totalOvertimeMinutes, bandResults: bandResults, uncoveredMinutes: uncoveredMinutes, pay: pay, hourlyRate: hourlyRate };
+    return { totalOvertimeMinutes: totalOvertimeMinutes, bandResults: bandResults, uncoveredMinutes: uncoveredMinutes, pay: pay, hourlyRate: hourlyRate, weekend: weekend };
   }
 
   // ---------- supabase data layer ----------
@@ -866,7 +898,11 @@
     neutral.style.left = (ns/1440*100) + '%';
     neutral.style.width = (Math.max(0,ne-ns)/1440*100) + '%';
 
-    config.bands.forEach(function(b){
+    const dateVal = document.getElementById('inDate') ? document.getElementById('inDate').value : '';
+    const weekendMode = isWeekendDate(dateVal);
+    const visibleBands = config.bands.filter(function(b){ return !!b.weekend === weekendMode; });
+
+    visibleBands.forEach(function(b){
       let bs = toMinutes(b.start), be = toMinutes(b.end);
       if (be <= bs) be += 1440;
       const pieces = [];
@@ -885,12 +921,15 @@
     positionPreview(previewRange);
 
     const legend = document.getElementById('stripLegend');
-    const uniquePct = Array.from(new Set(config.bands.map(function(b){return b.pct;}))).sort(function(a,b){return a-b;});
+    const uniquePct = Array.from(new Set(visibleBands.map(function(b){return b.pct;}))).sort(function(a,b){return a-b;});
     let legendHtml = '<span class="legend-chip"><span class="legend-dot" style="background:var(--neutral-band)"></span>Jornada normal</span>';
     uniquePct.forEach(function(p){
       const color = p>=75 ? 'var(--violet)' : 'var(--teal)';
       legendHtml += '<span class="legend-chip"><span class="legend-dot" style="background:'+color+'"></span>Extra '+p+'%</span>';
     });
+    if (weekendMode) {
+      legendHtml += '<span class="legend-chip" style="color:var(--teal)">Modo fin de semana</span>';
+    }
     legend.innerHTML = legendHtml;
   }
 
@@ -901,7 +940,7 @@
     let html = '<span>Hora regular: <b>'+fmtMoney(hourly)+'</b></span>';
     config.bands.forEach(function(b){
       const rate = hourly*(1+b.pct/100);
-      html += '<span>'+b.pct+'%: <b>'+fmtMoney(rate)+'</b>/h</span>';
+      html += '<span>'+b.pct+'%'+(b.weekend?' (FDS)':'')+': <b>'+fmtMoney(rate)+'</b>/h</span>';
     });
     el.innerHTML = html;
   }
@@ -914,6 +953,10 @@
         '<input type="time" value="'+band.start+'" data-field="start" data-id="'+band.id+'">' +
         '<input type="time" value="'+band.end+'" data-field="end" data-id="'+band.id+'">' +
         '<input type="number" value="'+band.pct+'" min="0" max="300" step="1" data-field="pct" data-id="'+band.id+'">' +
+        '<label class="band-weekend" title="Aplica solo sábados y domingos">' +
+          '<input type="checkbox" data-field="weekend" data-id="'+band.id+'"'+(band.weekend?' checked':'')+'>' +
+          '<span>FDS</span>' +
+        '</label>' +
         '<button class="band-remove" type="button" data-remove="'+band.id+'" aria-label="Eliminar franja">✕</button>' +
         '</div>';
     });
@@ -945,7 +988,7 @@
       let badges = '';
       en.calc.bandResults.filter(function(b){return b.minutes>0;}).forEach(function(b){
         const cls = bandClass(b.pct) === 'band-100' ? 'b100' : 'b50';
-        badges += '<span class="badge '+cls+'">'+fmtHours(b.minutes)+' · '+b.pct+'%</span>';
+        badges += '<span class="badge '+cls+'">'+fmtHours(b.minutes)+' · '+b.pct+'%'+(b.weekend?' FDS':'')+'</span>';
       });
       if (en.calc.uncoveredMinutes > 0) {
         badges += '<span class="badge warn">'+fmtHours(en.calc.uncoveredMinutes)+' sin franja</span>';
@@ -1045,19 +1088,33 @@
       const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
       const marginX = 40;
       const pageHeight = doc.internal.pageSize.getHeight();
+      const pageWidth = doc.internal.pageSize.getWidth();
       let y = 50;
 
-      const cols = [
-        { key: 'date', label: 'Fecha', w: 65 },
-        { key: 'location', label: 'Localidad', w: 90 },
-        { key: 'work', label: 'Trabajo', w: 170 },
-        { key: 'start', label: 'Entrada', w: 55 },
-        { key: 'end', label: 'Salida', w: 55 },
-        { key: 'h50', label: 'Horas 50%', w: 65 },
-        { key: 'h100', label: 'Horas 100%', w: 70 },
-        { key: 'total', label: 'Total h', w: 55 },
-        { key: 'pay', label: 'Pago', w: 87 }
+      // Una columna de horas por cada % de recargo realmente configurado (nada hardcodeado a 50/100).
+      const pctKeys = Array.from(new Set(config.bands.map(function(b){ return b.pct+'|'+(b.weekend?1:0); })))
+        .map(function(k){ const parts = k.split('|'); return { pct: Number(parts[0]), weekend: parts[1]==='1' }; })
+        .sort(function(a,b){ return a.pct - b.pct || (a.weekend?1:0) - (b.weekend?1:0); });
+
+      const fixedCols = [
+        { key: 'date', label: 'Fecha', w: 60 },
+        { key: 'location', label: 'Localidad', w: 80 },
+        { key: 'work', label: 'Trabajo', w: Math.max(90, 150 - Math.max(0, pctKeys.length-2)*15) },
+        { key: 'start', label: 'Entrada', w: 50 },
+        { key: 'end', label: 'Salida', w: 50 }
       ];
+      const tailCols = [
+        { key: 'total', label: 'Total h', w: 50 },
+        { key: 'pay', label: 'Pago', w: 80 }
+      ];
+      const fixedWidth = fixedCols.reduce(function(s,c){ return s+c.w; }, 0) + tailCols.reduce(function(s,c){ return s+c.w; }, 0);
+      const availableForPct = Math.max(0, (pageWidth - marginX*2) - fixedWidth);
+      const pctColWidth = pctKeys.length ? Math.min(70, Math.max(42, availableForPct / pctKeys.length)) : 0;
+      const pctCols = pctKeys.map(function(pk){
+        return { key: 'pct_'+pk.pct+'_'+(pk.weekend?'fds':'sem'), pct: pk.pct, weekend: pk.weekend, label: pk.pct + '%', w: pctColWidth };
+      });
+
+      const cols = fixedCols.concat(pctCols, tailCols);
       const tableWidth = cols.reduce(function(s,c){ return s+c.w; }, 0);
 
       function drawTitle() {
@@ -1116,8 +1173,6 @@
         }
         doc.setTextColor(30,40,42);
 
-        const h50 = en.calc.bandResults.filter(function(b){return b.pct<75;}).reduce(function(s,b){return s+b.minutes;},0)/60;
-        const h100 = en.calc.bandResults.filter(function(b){return b.pct>=75;}).reduce(function(s,b){return s+b.minutes;},0)/60;
         const totalH = en.calc.totalOvertimeMinutes/60;
 
         const rowVals = {
@@ -1126,11 +1181,16 @@
           work: en.work || '-',
           start: fmt12(en.start),
           end: fmt12(en.end),
-          h50: h50 ? h50.toFixed(1)+'h' : '-',
-          h100: h100 ? h100.toFixed(1)+'h' : '-',
           total: totalH.toFixed(1)+'h',
           pay: fmtMoney(en.calc.pay)
         };
+        pctCols.forEach(function(pc){
+          const mins = en.calc.bandResults
+            .filter(function(b){ return b.pct === pc.pct && !!b.weekend === pc.weekend; })
+            .reduce(function(s,b){ return s+b.minutes; }, 0);
+          const hrs = mins/60;
+          rowVals[pc.key] = hrs ? hrs.toFixed(1)+'h' : '-';
+        });
 
         let x = marginX;
         cols.forEach(function(c){
@@ -1269,6 +1329,7 @@
       const band = config.bands.find(function(b){return b.id===id;});
       if (!band) return;
       if (field === 'pct') band.pct = parseFloat(e.target.value) || 0;
+      else if (field === 'weekend') band.weekend = e.target.checked;
       else band[field] = e.target.value;
       recalcAllEntries(); renderRateReadout(); renderStrip(currentPreviewRange()); renderEntries(); saveConfig();
     });
@@ -1279,11 +1340,11 @@
       renderBandsList(); recalcAllEntries(); renderRateReadout(); renderStrip(currentPreviewRange()); renderEntries(); saveConfig();
     });
     document.getElementById('addBandBtn').addEventListener('click', function(){
-      config.bands.push({ id: uid(), start: '18:00', end: '21:00', pct: 50 });
+      config.bands.push({ id: uid(), start: '18:00', end: '21:00', pct: 50, weekend: false });
       renderBandsList(); saveConfig();
     });
 
-    ['inStart','inEnd'].forEach(function(id){
+    ['inStart','inEnd','inDate'].forEach(function(id){
       document.getElementById(id).addEventListener('input', function(){ renderStrip(currentPreviewRange()); });
     });
 
