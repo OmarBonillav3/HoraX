@@ -498,6 +498,9 @@
     <button class="btn-secondary" id="signupBtn" type="button">Crear cuenta</button>
     <button class="btn-ghost" id="forgotBtn" type="button" style="margin-top:10px">¿Olvidaste tu contraseña?</button>
     <p class="auth-switch">Solo necesitas crear la cuenta una vez. Después usa el mismo correo y contraseña en cualquier dispositivo.</p>
+    <hr style="border:none;border-top:1px solid var(--border,#2a2a2a);margin:18px 0">
+    <button class="btn-ghost" id="guestBtn" type="button">Entrar como invitado</button>
+    <p class="auth-switch">Modo invitado: puedes calcular tus horas y exportar el PDF, pero nada se guarda — al cerrar o recargar la página se pierde.</p>
   </section>
 </div>
 
@@ -535,7 +538,7 @@
     <p class="subtitle">Pon tu entrada y salida. HoraX calcula solo cuántas horas caen en cada franja y cuánto te deben.</p>
   </header>
 
-  <p class="account-note">Sesión iniciada como <b id="accountEmail"></b></p>
+  <p class="account-note" id="accountNote">Sesión iniciada como <b id="accountEmail"></b></p>
 
   <section class="strip-card" aria-label="Tu jornada de 24 horas">
     <div class="strip-track" id="stripTrack">
@@ -632,7 +635,7 @@
     <button class="reset-link" id="resetBtn" type="button">Borrar todos mis datos</button>
     <button class="reset-link logout" id="logoutBtn" type="button">Cerrar sesión</button>
   </div>
-  <p class="storage-note">Tus turnos se guardan en la nube (Supabase) — se ven igual desde cualquier dispositivo donde inicies sesión.</p>
+  <p class="storage-note" id="storageNote">Tus turnos se guardan en la nube (Supabase) — se ven igual desde cualquier dispositivo donde inicies sesión.</p>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -656,7 +659,8 @@
     bands: [
       { id: 'b1', start: '18:00', end: '21:00', pct: 35, weekend: false },
       { id: 'b2', start: '06:00', end: '08:00', pct: 50, weekend: false },
-      { id: 'b3', start: '21:00', end: '23:00', pct: 50, weekend: false }
+      { id: 'b3', start: '21:00', end: '23:00', pct: 50, weekend: false },
+      { id: 'b4', start: '06:00', end: '23:00', pct: 100, weekend: true }
     ]
   };
 
@@ -669,6 +673,7 @@
   let config = null;
   let entries = null;
   let editingId = null;
+  let isGuest = false;
 
   function clone(obj){ return JSON.parse(JSON.stringify(obj)); }
 
@@ -772,6 +777,7 @@
   }
 
   async function loadData() {
+    if (isGuest) { config = clone(DEFAULT_CONFIG); entries = []; return; }
     const uid_ = await getUserId();
     if (!uid_) { config = clone(DEFAULT_CONFIG); entries = []; return; }
 
@@ -803,6 +809,7 @@
   }
 
   async function saveConfig() {
+    if (isGuest) return;
     const uid_ = await getUserId();
     if (!uid_) return;
     const row = {
@@ -818,6 +825,7 @@
   }
 
   async function insertEntry(raw) {
+    if (isGuest) return { id: uid(), created_at: new Date().toISOString() };
     const uid_ = await getUserId();
     if (!uid_) return null;
     const row = {
@@ -834,11 +842,13 @@
   }
 
   async function deleteEntryFromDb(id) {
+    if (isGuest) return;
     const { error } = await supabase.from('overtime_entries').delete().eq('id', id);
     if (error) console.error(error);
   }
 
   async function updateEntry(id, raw) {
+    if (isGuest) return true;
     const row = {
       date: raw.date,
       location: raw.location,
@@ -852,6 +862,7 @@
   }
 
   async function deleteAllEntriesFromDb() {
+    if (isGuest) return;
     const uid_ = await getUserId();
     if (!uid_) return;
     const { error } = await supabase.from('overtime_entries').delete().eq('user_id', uid_);
@@ -1303,6 +1314,12 @@
         showAuthMessage('Cuenta creada. Revisa tu correo para confirmar y luego inicia sesión.', true);
       }
     });
+    document.getElementById('guestBtn').addEventListener('click', async function(){
+      isGuest = true;
+      document.getElementById('loadingScreen').style.display = 'none';
+      document.getElementById('resetScreen').style.display = 'none';
+      await bootApp();
+    });
   }
 
   function wireAppEvents() {
@@ -1418,7 +1435,10 @@
     });
 
     document.getElementById('resetBtn').addEventListener('click', async function(){
-      const ok = confirm('¿Seguro que quieres borrar todos tus turnos y tu configuración? Esto no se puede deshacer.');
+      const msg = isGuest
+        ? '¿Borrar los turnos que agregaste en esta sesión de invitado?'
+        : '¿Seguro que quieres borrar todos tus turnos y tu configuración? Esto no se puede deshacer.';
+      const ok = confirm(msg);
       if (!ok) return;
       await deleteAllEntriesFromDb();
       config = clone(DEFAULT_CONFIG);
@@ -1428,14 +1448,35 @@
     });
 
     document.getElementById('logoutBtn').addEventListener('click', async function(){
+      if (isGuest) {
+        isGuest = false;
+        config = null;
+        entries = null;
+        editingId = null;
+        document.getElementById('mainWrap').style.display = 'none';
+        document.getElementById('authScreen').style.display = 'block';
+        return;
+      }
       await supabase.auth.signOut();
     });
   }
 
   async function bootApp() {
     document.getElementById('authScreen').style.display = 'none';
-    const { data } = await supabase.auth.getUser();
-    document.getElementById('accountEmail').textContent = data && data.user ? data.user.email : '';
+    const accountNote = document.getElementById('accountNote');
+    const storageNote = document.getElementById('storageNote');
+    const resetBtnEl = document.getElementById('resetBtn');
+    if (isGuest) {
+      accountNote.innerHTML = 'Modo <b>invitado</b> — nada se guarda.';
+      storageNote.textContent = 'No se está guardando nada: al cerrar o recargar la página se pierden estos datos. Usa "Exportar PDF" antes de salir.';
+      resetBtnEl.textContent = 'Borrar turnos de esta sesión';
+    } else {
+      accountNote.innerHTML = 'Sesión iniciada como <b id="accountEmail"></b>';
+      const { data } = await supabase.auth.getUser();
+      document.getElementById('accountEmail').textContent = data && data.user ? data.user.email : '';
+      storageNote.textContent = 'Tus turnos se guardan en la nube (Supabase) — se ven igual desde cualquier dispositivo donde inicies sesión.';
+      resetBtnEl.textContent = 'Borrar todos mis datos';
+    }
     try {
       await loadData();
     } catch (err) {
